@@ -1,4 +1,4 @@
-import _ from 'lodash'
+import R from 'ramda'
 import queryBuilder from './query-builder'
 import filterBuilder from './filter-builder'
 import aggregationBuilder from './aggregation-builder'
@@ -71,18 +71,18 @@ export default function bodybuilder () {
       sort(field, direction = 'asc') {
         body.sort = body.sort || []
 
-        if (_.isArray(field)) {
+        if (R.is(Array, field)) {
 
-            if(_.isPlainObject(body.sort)) {
+            if(R.is(Object, body.sort) && !R.is(Array, body.sort)) {
                 body.sort = [body.sort]
             }
 
-            if(_.isArray(body.sort)) {
-                _.each(field, (sorts) => {
-                    _.each(sorts, (value, key) => {
+            if(R.is(Array, body.sort)) {
+                R.forEach((sorts) => {
+                    R.forEach((value, key) => {
                         sortMerge(body.sort, key, value)
-                    })
-                })
+                    }, sorts)
+                }, field)
             }
         } else {
           sortMerge(body.sort, field, direction)

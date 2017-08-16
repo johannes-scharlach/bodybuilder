@@ -1,4 +1,5 @@
-import _ from 'lodash'
+import R from 'ramda'
+import snakeCase from 'lodash.snakecase'
 import queryBuilder from './query-builder'
 import filterBuilder from './filter-builder'
 
@@ -15,23 +16,13 @@ import filterBuilder from './filter-builder'
 export function sortMerge(current, field, value) {
   let payload
 
-  if (_.isPlainObject(value)) {
-    payload = { [field]: _.assign({}, value) }
+  if (R.is(Object, value)) {
+    payload = { [field]: R.clone(value) }
   } else {
     payload = { [field]: { order: value } }
   }
 
-  const idx = _.findIndex(current, function (o) {
-    return o[field] != undefined
-  })
-
-  if (idx == -1) {
-    current.push(payload)
-  } else {
-    _.extend(current[idx], payload)
-  }
-
-  return current
+  return R.append(payload, current)
 }
 
 /**
@@ -46,13 +37,13 @@ export function sortMerge(current, field, value) {
  * @return {Object} Clause
  */
 export function buildClause (field, value, opts) {
-  const hasField = !_.isNil(field)
-  const hasValue = !_.isNil(value)
+  const hasField = field != null
+  const hasValue = value != null
   let mainClause = {}
 
   if (hasValue) {
     mainClause = {[field]: value}
-  } else if (_.isObject(field)) {
+  } else if (R.is(Object, field)) {
     mainClause = field
   } else if (hasField) {
     mainClause = {field}
@@ -101,15 +92,15 @@ export function toBool (filters) {
 }
 
 function unwrap (arr) {
-  return arr.length > 1 ? arr : _.last(arr)
+  return arr.length > 1 ? arr : R.last(arr)
 }
 
 const nestedTypes = ['nested', 'has_parent', 'has_child']
 
 export function pushQuery (existing, boolKey, type, ...args) {
   const nested = {}
-  if (_.isFunction(_.last(args))) {
-    const isNestedType = _.includes(nestedTypes, _.snakeCase(type))
+  if (R.is(Function, R.last(args))) {
+    const isNestedType = R.contains(snakeCase(type), nestedTypes)
     const nestedCallback = args.pop()
     // It is illogical to add a query nested inside a filter, because its
     // scoring won't be taken into account by elasticsearch. However we do need
@@ -141,9 +132,9 @@ export function pushQuery (existing, boolKey, type, ...args) {
   }
 
   if (
-    _.includes(['bool', 'constant_score'], type) &&
+    R.contains(type, ['bool', 'constant_score']) &&
     this.isInFilterContext &&
-    _.has(nested, 'filter.bool')
+    R.path(['filter', 'bool'], nested)
   ) {
     // nesting filters: We've introduced an unnecessary `filter.bool`
     existing[boolKey].push(
@@ -158,44 +149,44 @@ export function pushQuery (existing, boolKey, type, ...args) {
 }
 
 export function buildV1(body, queries, filters, aggregations) {
-  let clonedBody = _.cloneDeep(body)
+  let clonedBody = R.clone(body)
 
-  if (!_.isEmpty(filters)) {
-    _.set(clonedBody, 'query.filtered.filter', filters)
+  if (!R.isEmpty(filters)) {
+    clonedBody = R.assocPath(['query', 'filtered', 'filter'], filters, clonedBody)
 
-    if (!_.isEmpty(queries)) {
-      _.set(clonedBody, 'query.filtered.query', queries)
+    if (!R.isEmpty(queries)) {
+      clonedBody = R.assocPath(['query', 'filtered', 'query'], queries, clonedBody)
     }
 
-  } else if (!_.isEmpty(queries)) {
-    _.set(clonedBody, 'query', queries)
+  } else if (!R.isEmpty(queries)) {
+    clonedBody = R.assoc('query', queries, clonedBody)
   }
 
-  if (!_.isEmpty(aggregations)) {
-    _.set(clonedBody, 'aggregations', aggregations)
+  if (!R.isEmpty(aggregations)) {
+    clonedBody = R.assoc('aggregations', aggregations, clonedBody)
   }
   return clonedBody
 }
 
 export function build(body, queries, filters, aggregations) {
-  let clonedBody = _.cloneDeep(body)
+  let clonedBody = R.clone(body)
 
-  if (!_.isEmpty(filters)) {
+  if (!R.isEmpty(filters)) {
     let filterBody = {}
     let queryBody = {}
-    _.set(filterBody, 'query.bool.filter', filters)
-    if (!_.isEmpty(queries.bool)) {
-      _.set(queryBody, 'query.bool', queries.bool)
-    } else if (!_.isEmpty(queries)) {
-      _.set(queryBody, 'query.bool.must', queries)
+    filterBody = R.assocPath(['query', 'bool', 'filter'], filters, filterBody)
+    if (!R.isEmpty(queries.bool)) {
+      queryBody = R.assocPath(['query', 'bool'], queries.bool, queryBody)
+    } else if (!R.isEmpty(queries)) {
+      R.assocPath(['query', 'bool', 'must'], queries.bool, queryBody)
     }
-    _.merge(clonedBody, filterBody, queryBody)
-  } else if (!_.isEmpty(queries)) {
-    _.set(clonedBody, 'query', queries)
+    clonedBody = R.reduce(R.mergeDeepRight, clonedBody, [filterBody, queryBody])
+  } else if (!R.isEmpty(queries)) {
+    clonedBody = R.assoc('query', queries, clonedBody)
   }
 
-  if (!_.isEmpty(aggregations)) {
-    _.set(clonedBody, 'aggs', aggregations)
+  if (!R.isEmpty(aggregations)) {
+    clonedBody = R.assoc('aggs', aggregations, clonedBody)
   }
 
   return clonedBody

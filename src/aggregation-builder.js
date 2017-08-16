@@ -1,4 +1,4 @@
-import _ from 'lodash'
+import R from 'ramda'
 import { buildClause } from './utils'
 import filterBuilder from './filter-builder'
 
@@ -6,12 +6,15 @@ export default function aggregationBuilder () {
   let aggregations = {}
 
   function makeAggregation (type, field, ...args) {
-    const aggName = _.find(args, _.isString) || `agg_${type}_${field}`
-    const opts = _.find(args, _.isPlainObject)
-    const nested = _.find(args, _.isFunction)
+    const aggName = R.find(R.is(String), args) || `agg_${type}_${field}`
+    const nested = R.find(R.is(Function), args)
+    const opts = R.find(
+      R.allPass([R.is(Object), R.compose(R.not, R.is(Function))]),
+      args
+    )
     const nestedClause = {}
 
-    if (_.isFunction(nested)) {
+    if (R.is(Function, nested)) {
       const nestedResult = nested(Object.assign(
         {},
         aggregationBuilder(),
@@ -95,7 +98,7 @@ export default function aggregationBuilder () {
     },
 
     hasAggregations () {
-      return !!_.size(aggregations)
+      return !R.isEmpty(aggregations)
     }
   }
 }
